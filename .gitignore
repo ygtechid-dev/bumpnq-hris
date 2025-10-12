@@ -1,0 +1,71 @@
+# ==> Ketergantungan (Dependencies) <==
+# Direktori ini berisi semua library pihak ketiga, ukurannya sangat besar
+# dan dapat dibuat ulang kapan saja dengan `npm install` atau `yarn install`.
+node_modules/
+
+# ==> File Log <==
+# Log yang dihasilkan selama development atau saat terjadi error.
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==> Cache & Direktori Sementara <==
+# Cache yang dibuat oleh Metro bundler untuk mempercepat proses build.
+.metro-cache/
+temp/
+coverage/
+
+# ==> Bundles <==
+# File JavaScript bundle yang dihasilkan oleh Metro.
+*.bundle
+
+# ==> Build Artifacts untuk Android <==
+# Folder build yang berisi file APK/AAB dan file hasil kompilasi lainnya.
+android/app/build/
+android/build/
+android/.gradle/
+
+# ==> Konfigurasi Lokal Android <==
+# File ini berisi path ke SDK Android Anda dan informasi sensitif lainnya.
+# Seharusnya tidak pernah dimasukkan ke dalam version control.
+android/local.properties
+
+# ==> Keystore Android <==
+# JANGAN PERNAH MENYIMPAN SIGNING KEY ANDA DI REPOSITORY!
+# Ini adalah kunci rahasia untuk mempublikasikan aplikasi Anda ke Play Store.
+*.jks
+*.keystore
+
+# ==> Build Artifacts untuk iOS <==
+# Folder build yang dihasilkan oleh Xcode.
+ios/build/
+
+# ==> Ketergantungan iOS (CocoaPods) <==
+# Sama seperti node_modules, folder ini dapat dibuat ulang dengan `pod install`.
+ios/Pods/
+
+# ==> Konfigurasi & Data Pengguna Xcode <==
+# Pengaturan yang spesifik untuk mesin development Anda.
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/.xcode.env.local
+
+# ==> Konfigurasi IDE & Editor <==
+# Pengaturan spesifik untuk editor kode seperti VS Code, WebStorm, dll.
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==> File yang Dihasilkan Sistem Operasi (OS) <==
+# File sampah yang dibuat oleh macOS, Windows, atau Linux.
+.DS_Store
+Thumbs.db
+
+# ==> File Environment <==
+# File yang berisi variabel lingkungan seperti API Keys, token, dll.
+# Simpan file contohnya (misal: .env.example) tapi abaikan file utamanya.
+.env
+.env.*
+!.env.example

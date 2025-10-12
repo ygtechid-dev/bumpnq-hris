@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "672006437167",
+    "firebase_url": "https://bumpnq-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "bumpnq",
+    "storage_bucket": "bumpnq.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:672006437167:android:a313f1aa4b0e83631dc9da",
+        "android_client_info": {
+          "package_name": "com.bumpnqmobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD2DP-9mOyxShIDCu7-Pi4Z_rvNfGHt0_E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

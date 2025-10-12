@@ -1,0 +1,253 @@
+{
+  "eventFormatter": {
+    "namespace": "App.Events"
+  },
+  "name": "count_tamu",
+  "options": {
+    "auth": {
+      "headers": [
+        Object
+      ]
+    },
+    "authEndpoint": "/broadcasting/auth",
+    "bearerToken": null,
+    "broadcaster": "reverb",
+    "cluster": "",
+    "csrfToken": null,
+    "enabledTransports": [
+      "ws",
+      "wss"
+    ],
+    "forceTLS": "http",
+    "host": null,
+    "key": "tjphliftzmznirmnly3k",
+    "nacl": {
+      "box": [
+        Functionanonymous
+      ],
+      "hash": [
+        Functionanonymous
+      ],
+      "lowlevel": [
+        Object
+      ],
+      "randomBytes": [
+        Functionanonymous
+      ],
+      "scalarMult": [
+        Functionanonymous
+      ],
+      "secretbox": [
+        Functionanonymous
+      ],
+      "setPRNG": [
+        Functionanonymous
+      ],
+      "sign": [
+        Functionanonymous
+      ],
+      "verify": [
+        Functionanonymous
+      ]
+    },
+    "namespace": "App.Events",
+    "userAuthentication": {
+      "endpoint": "/broadcasting/user-auth",
+      "headers": [
+        Object
+      ]
+    },
+    "wsHost": "192.168.88.7",
+    "wsPort": "9000",
+    "wssPort": "9000"
+  },
+  "pusher": {
+    "channels": {
+      "channels": [
+        Object
+      ]
+    },
+    "config": {
+      "activityTimeout": 120000,
+      "channelAuthorizer": [
+        Functionanonymous
+      ],
+      "cluster": "",
+      "enableStats": false,
+      "enabledTransports": [
+        Array
+      ],
+      "httpHost": "sockjs.pusher.com",
+      "httpPath": "/pusher",
+      "httpPort": 80,
+      "httpsPort": 443,
+      "nacl": [
+        Object
+      ],
+      "pongTimeout": 30000,
+      "statsHost": "stats.pusher.com",
+      "unavailableTimeout": 10000,
+      "useTLS": true,
+      "userAuthenticator": [
+        Functionanonymous
+      ],
+      "wsHost": "192.168.88.7",
+      "wsPath": "",
+      "wsPort": "9000",
+      "wssPort": "9000"
+    },
+    "connection": {
+      "callbacks": [
+        i
+      ],
+      "connection": null,
+      "connectionCallbacks": [
+        Object
+      ],
+      "errorCallbacks": [
+        Object
+      ],
+      "failThrough": undefined,
+      "global_callbacks": [
+        Array
+      ],
+      "handshakeCallbacks": [
+        Object
+      ],
+      "key": "tjphliftzmznirmnly3k",
+      "options": [
+        Object
+      ],
+      "runner": [
+        Object
+      ],
+      "state": "connecting",
+      "strategy": [
+        Z
+      ],
+      "timeline": [
+        Bt
+      ],
+      "unavailableTimer": [
+        o
+      ],
+      "usingTLS": true
+    },
+    "global_emitter": {
+      "callbacks": [
+        i
+      ],
+      "failThrough": undefined,
+      "global_callbacks": [
+        Array
+      ]
+    },
+    "key": "tjphliftzmznirmnly3k",
+    "options": {
+      "auth": [
+        Object
+      ],
+      "authEndpoint": "/broadcasting/auth",
+      "bearerToken": null,
+      "broadcaster": "reverb",
+      "cluster": "",
+      "csrfToken": null,
+      "enabledTransports": [
+        Array
+      ],
+      "forceTLS": "http",
+      "host": null,
+      "key": "tjphliftzmznirmnly3k",
+      "nacl": [
+        Object
+      ],
+      "namespace": "App.Events",
+      "userAuthentication": [
+        Object
+      ],
+      "wsHost": "192.168.88.7",
+      "wsPort": "9000",
+      "wssPort": "9000"
+    },
+    "sessionID": 498401594,
+    "timeline": {
+      "events": [
+        Array
+      ],
+      "key": "tjphliftzmznirmnly3k",
+      "options": [
+        Object
+      ],
+      "sent": 0,
+      "session": 498401594,
+      "uniqueID": 1
+    },
+    "user": {
+      "_onAuthorize": [
+        Functionanonymous
+      ],
+      "_signinDoneResolve": null,
+      "callbacks": [
+        i
+      ],
+      "failThrough": [
+        Functionanonymous
+      ],
+      "global_callbacks": [
+        Array
+      ],
+      "pusher": [
+        Circular
+      ],
+      "serverToUserChannel": null,
+      "signinDonePromise": null,
+      "signin_requested": false,
+      "user_data": null,
+      "watchlist": [
+        se
+      ]
+    }
+  },
+  "subscription": {
+    "callbacks": {
+      "_callbacks": [
+        Object
+      ]
+    },
+    "failThrough": [
+      Functionanonymous
+    ],
+    "global_callbacks": [
+      
+    ],
+    "name": "count_tamu",
+    "pusher": {
+      "channels": [
+        $
+      ],
+      "config": [
+        Object
+      ],
+      "connection": [
+        K
+      ],
+      "global_emitter": [
+        s
+      ],
+      "key": "tjphliftzmznirmnly3k",
+      "options": [
+        Object
+      ],
+      "sessionID": 498401594,
+      "timeline": [
+        Bt
+      ],
+      "user": [
+        ae
+      ]
+    },
+    "subscribed": false,
+    "subscriptionCancelled": false,
+    "subscriptionPending": false
+  }
+}
