@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">BUMP-NQ APPS</string>
+    <!-- <string name="app_name">BUMP-NQ APPS</string> -->
+    <string name="app_name">BUMP-NQ</string>
+    <!-- <string name="app_name">HRIS YG APP</string> -->
+
+
 </resources>

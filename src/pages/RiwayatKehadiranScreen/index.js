@@ -8,6 +8,8 @@ import {
   StatusBar,
   Dimensions,
   ActivityIndicator,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
@@ -19,7 +21,7 @@ const { width: screenWidth } = Dimensions.get('window');
 const RiwayatKehadiranScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
   const [attendanceData, setAttendanceData] = useState([]);
-  const [shiftScheduleData, setShiftScheduleData] = useState([]); // New state for shift schedules
+  const [shiftScheduleData, setShiftScheduleData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [monthlyStats, setMonthlyStats] = useState({
@@ -28,9 +30,14 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
     terlambat: 0,
     persentaseKehadiran: 0
   });
+  
+  // State untuk Month Picker Modal
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [availableMonths, setAvailableMonths] = useState([]);
 
   useEffect(() => {
     loadUserData();
+    generateAvailableMonths();
   }, []);
 
   useEffect(() => {
@@ -38,6 +45,23 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
       loadAttendanceData();
     }
   }, [userData, selectedMonth]);
+
+  // Generate list of available months (last 12 months from current month)
+  const generateAvailableMonths = () => {
+    const months = [];
+    const currentDate = new Date();
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+      months.push({
+        date: date,
+        label: date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+        value: date.toISOString()
+      });
+    }
+    
+    setAvailableMonths(months);
+  };
 
   const loadUserData = async () => {
     try {
@@ -61,6 +85,10 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
       
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
+
+      console.log('====================================');
+      console.log('Loading data for period:', startDateStr, 'to', endDateStr);
+      console.log('====================================');
 
       // Fetch attendance data
       const attendanceResponse = await fetch(
@@ -125,7 +153,6 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
   const getShiftForDate = (date, shiftSchedules) => {
     if (!shiftSchedules || shiftSchedules.length === 0) return null;
     
-    // Find shift schedule that matches the date
     const shift = shiftSchedules.find(schedule => {
       const scheduleDate = new Date(schedule.shift_date).toISOString().split('T')[0];
       const targetDate = new Date(date).toISOString().split('T')[0];
@@ -139,10 +166,8 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
   const getShiftStartTimeFromSchedule = (shiftSchedule) => {
     if (shiftSchedule && shiftSchedule.shifts && shiftSchedule.shifts.start_time) {
       const startTime = shiftSchedule.shifts.start_time;
-      // Return full HH:MM:SS format for calculation
       if (startTime.includes(':')) {
         const parts = startTime.split(':');
-        // Ensure we have HH:MM:SS format
         if (parts.length === 2) {
           return `${parts[0]}:${parts[1]}:00`;
         }
@@ -157,44 +182,28 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
   const isLateBasedOnShift = (item, shiftSchedules) => {
     if (!item.check_in?.time) return false;
     
-    // Get shift schedule for this attendance date
     const shiftSchedule = getShiftForDate(item.date, shiftSchedules);
+    if (!shiftSchedule) return false;
     
-    if (!shiftSchedule) {
-      console.log('No shift schedule found for date:', item.date);
-      return false;
-    }
-    
-    // Get shift start time from the schedule
     const shiftStartTime = getShiftStartTimeFromSchedule(shiftSchedule);
-    
-    console.log('====================================');
-    console.log('Checking late for date:', item.date);
-    console.log('Shift name:', shiftSchedule.shifts?.name);
-    console.log('Shift start time:', shiftStartTime);
-    console.log('Check-in time:', item.check_in.time);
-    console.log('====================================');
-    
     if (!shiftStartTime) return false;
 
-    // Parse check-in time
     const checkInDate = new Date(item.check_in.time);
-    const checkInHour = checkInDate.getHours();
-    const checkInMinute = checkInDate.getMinutes();
-    const checkInSecond = checkInDate.getSeconds();
+    
+    const checkInTimeString = checkInDate.toLocaleTimeString('en-GB', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      timeZone: 'Asia/Jakarta',
+      hour12: false 
+    });
 
-    // Parse shift start time (format: HH:MM:SS)
+    const [checkInHour, checkInMinute, checkInSecond] = checkInTimeString.split(':').map(Number);
     const [shiftHour, shiftMinute, shiftSecond] = shiftStartTime.split(':').map(Number);
 
-    // Convert both to total seconds for easy comparison
     const checkInTotalSeconds = checkInHour * 3600 + checkInMinute * 60 + checkInSecond;
     const shiftStartTotalSeconds = shiftHour * 3600 + shiftMinute * 60 + (shiftSecond || 0);
 
-    console.log('Check-in total seconds:', checkInTotalSeconds);
-    console.log('Shift start total seconds:', shiftStartTotalSeconds);
-    console.log('Is late?', checkInTotalSeconds > shiftStartTotalSeconds);
-
-    // Late if check-in time is after shift start time
     return checkInTotalSeconds > shiftStartTotalSeconds;
   };
 
@@ -250,6 +259,11 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
     setSelectedMonth(newDate);
   };
 
+  const handleMonthSelect = (monthData) => {
+    setSelectedMonth(new Date(monthData.date));
+    setShowMonthPicker(false);
+  };
+
   const getStatusColor = (item) => {
     if (!item.check_in?.time) return '#FF6B6B'; // Absent - Red
     if (isLateBasedOnShift(item, shiftScheduleData)) return '#FF9800'; // Late - Orange
@@ -295,9 +309,7 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
             <Text style={styles.summaryTitle}>Perhitungan Bulanan</Text>
             <TouchableOpacity 
               style={styles.monthButton}
-              onPress={() => {
-                // You can implement a month picker modal here
-              }}
+              onPress={() => setShowMonthPicker(true)}
             >
               <Text style={styles.monthButtonText}>{getMonthName(selectedMonth)}</Text>
               <FontAwesome5 name="chevron-down" size={12} color="#fff" />
@@ -329,23 +341,53 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
             <Text style={styles.attendancePercentage}>{monthlyStats.persentaseKehadiran}%</Text>
             <View style={styles.attendanceInfo}>
               <View style={styles.attendanceChange}>
-                <FontAwesome5 name="chart-line" size={12} color="#4CAF50" />
-                <Text style={styles.changeText}>5.2%</Text>
+                <FontAwesome5 
+                  name={monthlyStats.persentaseKehadiran >= 90 ? "arrow-up" : "arrow-down"} 
+                  size={12} 
+                  color={monthlyStats.persentaseKehadiran >= 90 ? "#4CAF50" : "#FF6B6B"} 
+                />
+                <Text style={[
+                  styles.changeText,
+                  { color: monthlyStats.persentaseKehadiran >= 90 ? "#4CAF50" : "#FF6B6B" }
+                ]}>
+                  {monthlyStats.persentaseKehadiran}%
+                </Text>
               </View>
-              <Text style={styles.previousMonth}>Bulan lalu: 92.5%</Text>
+              <Text style={styles.previousMonth}>
+                Bulan: {getMonthName(selectedMonth)}
+              </Text>
             </View>
           </View>
 
           {/* Period Tabs */}
           <View style={styles.periodTabs}>
-            <TouchableOpacity style={styles.periodTab}>
+            <TouchableOpacity 
+              style={styles.periodTab}
+              onPress={() => {
+                const newDate = new Date();
+                newDate.setMonth(newDate.getMonth() - 1);
+                setSelectedMonth(newDate);
+              }}
+            >
               <Text style={styles.periodTabText}>1M</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.periodTab, styles.activePeriodTab]}>
-              <Text style={[styles.periodTabText, styles.activePeriodTabText]}>1B</Text>
+            <TouchableOpacity 
+              style={[styles.periodTab, styles.activePeriodTab]}
+              onPress={() => setShowMonthPicker(true)}
+            >
+              <Text style={[styles.periodTabText, styles.activePeriodTabText]}>
+                {selectedMonth.toLocaleDateString('id-ID', { month: 'short' })}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.periodTab}>
-              <Text style={styles.periodTabText}>1T</Text>
+            <TouchableOpacity 
+              style={styles.periodTab}
+              onPress={() => {
+                const newDate = new Date();
+                newDate.setMonth(newDate.getMonth() - 3);
+                setSelectedMonth(newDate);
+              }}
+            >
+              <Text style={styles.periodTabText}>3M</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -355,7 +397,9 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
           {/* Records List */}
           {attendanceData.length === 0 ? (
             <View style={styles.emptyState}>
+              <FontAwesome5 name="calendar-times" size={50} color="#DDD" />
               <Text style={styles.emptyText}>Tidak ada data kehadiran untuk bulan ini</Text>
+              <Text style={styles.emptySubText}>{getMonthName(selectedMonth)}</Text>
             </View>
           ) : (
             attendanceData.map((item, index) => (
@@ -388,11 +432,11 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
                         {formatTime(item.check_out?.time)}
                       </Text>
                     </View>
-                    {item.shift_schedules?.shifts?.name && (
+                    {getShiftForDate(item.date, shiftScheduleData) && (
                       <View style={styles.timeEntry}>
                         <Text style={styles.timeLabel}>Shift:</Text>
                         <Text style={[styles.timeValue, { color: '#5EC898' }]}>
-                          {getShiftForDate(item.date, shiftScheduleData)?.shifts?.name || item.shift_schedules.shifts.name}
+                          {getShiftForDate(item.date, shiftScheduleData)?.shifts?.name || '-'}
                         </Text>
                       </View>
                     )}
@@ -415,6 +459,97 @@ const RiwayatKehadiranScreen = ({ navigation }) => {
           )}
         </View>
       </ScrollView>
+
+      {/* =============== MONTH PICKER MODAL =============== */}
+      <Modal
+        visible={showMonthPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMonthPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Pilih Bulan</Text>
+              <TouchableOpacity 
+                onPress={() => setShowMonthPicker(false)}
+                style={styles.modalCloseButton}
+              >
+                <FontAwesome5 name="times" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Month List */}
+            <FlatList
+              data={availableMonths}
+              keyExtractor={(item) => item.value}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const isSelected = 
+                  item.date.getMonth() === selectedMonth.getMonth() &&
+                  item.date.getFullYear() === selectedMonth.getFullYear();
+                
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.monthPickerItem,
+                      isSelected && styles.monthPickerItemSelected
+                    ]}
+                    onPress={() => handleMonthSelect(item)}
+                  >
+                    <View style={styles.monthPickerItemContent}>
+                      <FontAwesome5 
+                        name="calendar-alt" 
+                        size={16} 
+                        color={isSelected ? '#5EC898' : '#999'} 
+                      />
+                      <Text style={[
+                        styles.monthPickerItemText,
+                        isSelected && styles.monthPickerItemTextSelected
+                      ]}>
+                        {item.label}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <FontAwesome5 name="check-circle" size={20} color="#5EC898" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+
+            {/* Quick Select Buttons */}
+            <View style={styles.quickSelectContainer}>
+              <TouchableOpacity
+                style={styles.quickSelectButton}
+                onPress={() => {
+                  const currentDate = new Date();
+                  setSelectedMonth(currentDate);
+                  setShowMonthPicker(false);
+                }}
+              >
+                <FontAwesome5 name="calendar-day" size={14} color="#5EC898" />
+                <Text style={styles.quickSelectText}>Bulan Ini</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.quickSelectButton}
+                onPress={() => {
+                  const lastMonth = new Date();
+                  lastMonth.setMonth(lastMonth.getMonth() - 1);
+                  setSelectedMonth(lastMonth);
+                  setShowMonthPicker(false);
+                }}
+              >
+                <FontAwesome5 name="calendar-minus" size={14} color="#5EC898" />
+                <Text style={styles.quickSelectText}>Bulan Lalu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* =============== END MONTH PICKER MODAL =============== */}
     </View>
   );
 };
@@ -604,14 +739,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#5EC898',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
   },
   monthButtonText: {
     color: '#fff',
-    fontSize: 10,
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: '600',
     marginRight: 8,
   },
   statsRow: {
@@ -671,9 +806,8 @@ const styles = StyleSheet.create({
   },
   changeText: {
     fontSize: 14,
-    color: '#4CAF50',
-    marginLeft: 5,
     fontWeight: '500',
+    marginLeft: 5,
   },
   previousMonth: {
     fontSize: 12,
@@ -713,31 +847,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  recordsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  recordsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  downloadButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  downloadText: {
-    fontSize: 12,
-    color: '#666',
-    marginRight: 8,
-  },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
@@ -746,6 +855,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     fontStyle: 'italic',
+    marginTop: 15,
+  },
+  emptySubText: {
+    fontSize: 12,
+    color: '#BBB',
+    marginTop: 5,
   },
   recordItem: {
     flexDirection: 'row',
@@ -801,6 +916,90 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
+  
+  // =============== MODAL STYLES ===============
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalCloseButton: {
+    width: 35,
+    height: 35,
+    borderRadius: 17.5,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthPickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F5F5',
+  },
+  monthPickerItemSelected: {
+    backgroundColor: '#E8F5E8',
+  },
+  monthPickerItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  monthPickerItemText: {
+    fontSize: 15,
+    color: '#333',
+    marginLeft: 12,
+  },
+  monthPickerItemTextSelected: {
+    color: '#5EC898',
+    fontWeight: '600',
+  },
+  quickSelectContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5E5',
+  },
+  quickSelectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#E8F5E8',
+    borderRadius: 20,
+  },
+  quickSelectText: {
+    fontSize: 13,
+    color: '#5EC898',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  // =============== END MODAL STYLES ===============
+  
   placeholderContainer: {
     flex: 1,
     justifyContent: 'center',

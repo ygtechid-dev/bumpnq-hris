@@ -468,73 +468,200 @@ const Cameras = ({ navigation, route }) => {
     return labels[type] || 'Absensi';
   };
 
+  // const submitAttendance = async (imageUri) => {
+  //   try {
+  //     if (!userData?.user?.id) {
+  //       Alert.alert('Error', 'Data user tidak ditemukan');
+  //       return false;
+  //     }
+
+  //     if (!location) {
+  //       Alert.alert('Error', 'Lokasi belum tersedia. Mohon tunggu sebentar.');
+  //       return false;
+  //     }
+
+  //     const type = determineAttendanceType();
+      
+  //     if (!type) {
+  //       Alert.alert('Info', 'Absensi hari ini sudah lengkap');
+  //       return false;
+  //     }
+
+  //     const formData = new FormData();
+  //     formData.append('type', type);
+  //     formData.append('user_id', userData.user.id.toString());
+      
+  //     formData.append('location', location.address);
+  //     formData.append('latitude', location.latitude.toString());
+  //     formData.append('longitude', location.longitude.toString());
+      
+  //     formData.append('image', {
+  //       uri: imageUri,
+  //       type: 'image/jpeg',
+  //       name: `attendance_${type}_${Date.now()}.jpg`,
+  //     });
+
+  //     const notes = `${getAttendanceTypeLabel(type)} - ${new Date().toLocaleString('id-ID')}`;
+  //     formData.append('notes', notes);
+
+  //     const response = await fetch(`${API_BASE_URL}/attendance`, {
+  //       method: 'POST',
+  //       body: formData,
+  //       headers: {
+  //         'Content-Type': 'multipart/form-data',
+  //       },
+  //     });
+      
+  //     const result = await response.json();
+  //     const successData = {
+  //       attendanceType: type,
+  //       attendanceLabel: getAttendanceTypeLabel(type),
+  //       timestamp: new Date().toISOString(),
+  //       userData: userData,
+  //       location: location,
+  //       imageUri: imageUri,
+  //       status: 'Pending' // Status will be pending as per new API
+  //     };
+      
+  //     if (response.ok) {
+  //       navigation.replace('AbsenSuccessScreen', successData);
+  //       return true;
+  //     } else {
+  //       throw new Error(result.error || 'Failed to submit attendance');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error submitting attendance:', error);
+  //     Alert.alert('Error', `Gagal mencatat absensi: ${error.message}`);
+  //     return false;
+  //   }
+  // };
   const submitAttendance = async (imageUri) => {
-    try {
-      if (!userData?.user?.id) {
-        Alert.alert('Error', 'Data user tidak ditemukan');
-        return false;
-      }
-
-      if (!location) {
-        Alert.alert('Error', 'Lokasi belum tersedia. Mohon tunggu sebentar.');
-        return false;
-      }
-
-      const type = determineAttendanceType();
-      
-      if (!type) {
-        Alert.alert('Info', 'Absensi hari ini sudah lengkap');
-        return false;
-      }
-
-      const formData = new FormData();
-      formData.append('type', type);
-      formData.append('user_id', userData.user.id.toString());
-      
-      formData.append('location', location.address);
-      formData.append('latitude', location.latitude.toString());
-      formData.append('longitude', location.longitude.toString());
-      
-      formData.append('image', {
-        uri: imageUri,
-        type: 'image/jpeg',
-        name: `attendance_${type}_${Date.now()}.jpg`,
-      });
-
-      const notes = `${getAttendanceTypeLabel(type)} - ${new Date().toLocaleString('id-ID')}`;
-      formData.append('notes', notes);
-
-      const response = await fetch(`${API_BASE_URL}/attendance`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      
-      const result = await response.json();
-      const successData = {
-        attendanceType: type,
-        attendanceLabel: getAttendanceTypeLabel(type),
-        timestamp: new Date().toISOString(),
-        userData: userData,
-        location: location,
-        imageUri: imageUri,
-        status: 'Pending' // Status will be pending as per new API
-      };
-      
-      if (response.ok) {
-        navigation.replace('AbsenSuccessScreen', successData);
-        return true;
-      } else {
-        throw new Error(result.error || 'Failed to submit attendance');
-      }
-    } catch (error) {
-      console.error('Error submitting attendance:', error);
-      Alert.alert('Error', `Gagal mencatat absensi: ${error.message}`);
+  try {
+    if (!userData?.user?.id) {
+      Alert.alert('Error', 'Data user tidak ditemukan');
       return false;
     }
-  };
+
+    if (!location) {
+      Alert.alert('Error', 'Lokasi belum tersedia. Mohon tunggu sebentar.');
+      return false;
+    }
+
+    const type = determineAttendanceType();
+    
+    if (!type) {
+      Alert.alert('Info', 'Absensi hari ini sudah lengkap');
+      return false;
+    }
+
+    // ===== VALIDASI WAKTU BREAK_OUT =====
+    if (type === 'break_out' && currentAttendance?.check_in?.time) {
+      const checkInTime = new Date(currentAttendance.check_in.time);
+      const currentTime = new Date();
+      
+      // Bandingkan waktu sekarang dengan check_in_time
+      if (currentTime < checkInTime) {
+        Alert.alert(
+          'Validasi Waktu Gagal',
+          'Waktu break keluar tidak boleh lebih awal dari waktu check in. Silakan coba lagi nanti.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+      
+      // Optional: Validasi minimal jarak waktu (misal minimal 1 jam setelah check in)
+      const timeDiffInMinutes = (currentTime - checkInTime) / (1000 * 60);
+      const minimumMinutes = 60; // Minimal 1 jam
+      
+      if (timeDiffInMinutes < minimumMinutes) {
+        Alert.alert(
+          'Terlalu Cepat',
+          `Anda baru check in ${Math.floor(timeDiffInMinutes)} menit yang lalu. Minimal ${minimumMinutes} menit setelah check in untuk break keluar.`,
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+
+    // ===== VALIDASI WAKTU BREAK_IN =====
+    if (type === 'break_in' && currentAttendance?.break_out?.time) {
+      const breakOutTime = new Date(currentAttendance.break_out.time);
+      const currentTime = new Date();
+      
+      if (currentTime < breakOutTime) {
+        Alert.alert(
+          'Validasi Waktu Gagal',
+          'Waktu break masuk tidak boleh lebih awal dari waktu break keluar. Silakan coba lagi nanti.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+
+    // ===== VALIDASI WAKTU CHECK_OUT =====
+    if (type === 'check_out' && currentAttendance?.break_in?.time) {
+      const breakInTime = new Date(currentAttendance.break_in.time);
+      const currentTime = new Date();
+      
+      if (currentTime < breakInTime) {
+        Alert.alert(
+          'Validasi Waktu Gagal',
+          'Waktu check out tidak boleh lebih awal dari waktu break masuk. Silakan coba lagi nanti.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+    }
+    // ===== END VALIDASI =====
+
+    const formData = new FormData();
+    formData.append('type', type);
+    formData.append('user_id', userData.user.id.toString());
+    
+    formData.append('location', location.address);
+    formData.append('latitude', location.latitude.toString());
+    formData.append('longitude', location.longitude.toString());
+    
+    formData.append('image', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: `attendance_${type}_${Date.now()}.jpg`,
+    });
+
+    const notes = `${getAttendanceTypeLabel(type)} - ${new Date().toLocaleString('id-ID')}`;
+    formData.append('notes', notes);
+
+    const response = await fetch(`${API_BASE_URL}/attendance`, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    const result = await response.json();
+    const successData = {
+      attendanceType: type,
+      attendanceLabel: getAttendanceTypeLabel(type),
+      timestamp: new Date().toISOString(),
+      userData: userData,
+      location: location,
+      imageUri: imageUri,
+      status: 'Pending'
+    };
+    
+    if (response.ok) {
+      navigation.replace('AbsenSuccessScreen', successData);
+      return true;
+    } else {
+      throw new Error(result.error || 'Failed to submit attendance');
+    }
+  } catch (error) {
+    console.error('Error submitting attendance:', error);
+    Alert.alert('Error', `Gagal mencatat absensi: ${error.message}`);
+    return false;
+  }
+};
 
   const takeSelfie = async () => {
     if (!cameraRef.current || isCapturing) return;

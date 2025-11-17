@@ -80,10 +80,17 @@ android {
         applicationId "com.bumpnqmobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10
-        versionName "1.0"
+        versionCode 31
+        versionName "3.0"
         resConfigs "en", "id" // hanya Bahasa Inggris dan Indonesia
     }
+
+packagingOptions {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+
 
      lintOptions {
         checkReleaseBuilds false

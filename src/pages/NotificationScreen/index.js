@@ -106,78 +106,132 @@ const NotificationScreen = ({ navigation }) => {
   };
 
   const handleModalAction = () => {
+    // ✅ HANDLE NULL additional_data dengan safe parsing
     if (selectedNotification?.additional_data) {
       try {
-        const additionalData = typeof selectedNotification.additional_data === 'string' 
-          ? JSON.parse(selectedNotification.additional_data) 
-          : selectedNotification.additional_data;
+        let additionalData = null;
+        
+        // Safe parsing
+        if (typeof selectedNotification.additional_data === 'string') {
+          try {
+            additionalData = JSON.parse(selectedNotification.additional_data);
+          } catch (parseError) {
+            console.log('Error parsing additional_data string:', parseError);
+            additionalData = null;
+          }
+        } else if (typeof selectedNotification.additional_data === 'object') {
+          additionalData = selectedNotification.additional_data;
+        }
 
-        if (additionalData.screen) {
+        // Navigate if screen is specified
+        if (additionalData && additionalData.screen) {
           setModalVisible(false);
-          navigation.navigate(additionalData.screen, additionalData.params || {});
+          setTimeout(() => {
+            navigation.navigate(additionalData.screen, additionalData.params || {});
+          }, 300);
+          return;
         }
       } catch (error) {
-        console.log('Error parsing additional data:', error);
+        console.log('Error handling additional data:', error);
       }
     }
+    
+    // Close modal if no navigation needed
     setModalVisible(false);
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
-    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      const diffMinutes = Math.floor(diffTime / (1000 * 60));
 
-    if (diffMinutes < 60) {
-      return `${diffMinutes} menit yang lalu`;
-    } else if (diffHours < 24) {
-      return `${diffHours} jam yang lalu`;
-    } else if (diffDays < 7) {
-      return `${diffDays} hari yang lalu`;
-    } else {
-      return date.toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      if (diffMinutes < 60) {
+        return `${diffMinutes} menit yang lalu`;
+      } else if (diffHours < 24) {
+        return `${diffHours} jam yang lalu`;
+      } else if (diffDays < 7) {
+        return `${diffDays} hari yang lalu`;
+      } else {
+        return date.toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+    } catch (error) {
+      console.log('Error formatting date:', error);
+      return 'Baru saja';
     }
   };
 
+  // ✅ SAFE parsing untuk getNotificationIcon
   const getNotificationIcon = (notification) => {
-    const additionalData = notification.additional_data;
-    if (additionalData) {
-      try {
-        const data = typeof additionalData === 'string' ? JSON.parse(additionalData) : additionalData;
-        if (data.type === 'attendance') return 'clock';
-        if (data.type === 'announcement') return 'bullhorn';
-        if (data.type === 'task') return 'tasks';
-        if (data.type === 'reminder') return 'bell';
-      } catch (error) {
-        console.log('Error parsing notification data:', error);
+    if (!notification || !notification.additional_data) return 'bell';
+    
+    try {
+      let data = null;
+      
+      if (typeof notification.additional_data === 'string') {
+        try {
+          data = JSON.parse(notification.additional_data);
+        } catch (e) {
+          return 'bell';
+        }
+      } else if (typeof notification.additional_data === 'object') {
+        data = notification.additional_data;
       }
+      
+      if (!data || !data.type) return 'bell';
+      
+      switch (data.type) {
+        case 'attendance': return 'clock';
+        case 'announcement': return 'bullhorn';
+        case 'task': return 'tasks';
+        case 'reminder': return 'bell';
+        default: return 'info-circle';
+      }
+    } catch (error) {
+      console.log('Error getting notification icon:', error);
+      return 'bell';
     }
-    return 'info-circle';
   };
 
+  // ✅ SAFE parsing untuk getNotificationIconColor
   const getNotificationIconColor = (notification) => {
-    const additionalData = notification.additional_data;
-    if (additionalData) {
-      try {
-        const data = typeof additionalData === 'string' ? JSON.parse(additionalData) : additionalData;
-        if (data.type === 'attendance') return '#FF9800';
-        if (data.type === 'announcement') return '#2196F3';
-        if (data.type === 'task') return '#4CAF50';
-        if (data.type === 'reminder') return '#9C27B0';
-      } catch (error) {
-        console.log('Error parsing notification data:', error);
+    if (!notification || !notification.additional_data) return '#5EC898';
+    
+    try {
+      let data = null;
+      
+      if (typeof notification.additional_data === 'string') {
+        try {
+          data = JSON.parse(notification.additional_data);
+        } catch (e) {
+          return '#5EC898';
+        }
+      } else if (typeof notification.additional_data === 'object') {
+        data = notification.additional_data;
       }
+      
+      if (!data || !data.type) return '#5EC898';
+      
+      switch (data.type) {
+        case 'attendance': return '#FF9800';
+        case 'announcement': return '#2196F3';
+        case 'task': return '#4CAF50';
+        case 'reminder': return '#9C27B0';
+        default: return '#5EC898';
+      }
+    } catch (error) {
+      console.log('Error getting notification color:', error);
+      return '#5EC898';
     }
-    return '#5EC898';
   };
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
@@ -285,7 +339,7 @@ const NotificationScreen = ({ navigation }) => {
                         styles.notificationTitle,
                         !notification.is_read && styles.unreadTitle
                       ]}>
-                        {notification.title}
+                        {notification.title || 'Notifikasi'}
                       </Text>
                       {!notification.is_read && (
                         <View style={styles.unreadDot} />
@@ -293,7 +347,7 @@ const NotificationScreen = ({ navigation }) => {
                     </View>
                     
                     <Text style={styles.notificationBody} numberOfLines={2}>
-                      {notification.body}
+                      {notification.body || ''}
                     </Text>
                     
                     <Text style={styles.notificationDate}>
@@ -340,7 +394,7 @@ const NotificationScreen = ({ navigation }) => {
               showsVerticalScrollIndicator={false}
             >
               <Text style={styles.modalTitle}>
-                {selectedNotification?.title}
+                {selectedNotification?.title || 'Notifikasi'}
               </Text>
 
               <Text style={styles.modalDate}>
@@ -350,19 +404,10 @@ const NotificationScreen = ({ navigation }) => {
               <View style={styles.modalDivider} />
 
               <Text style={styles.modalBody}>
-                {selectedNotification?.body}
+                {selectedNotification?.body || ''}
               </Text>
 
-              {selectedNotification?.additional_data && (
-                <View style={styles.additionalInfo}>
-                  <Text style={styles.additionalInfoLabel}>Informasi Tambahan:</Text>
-                  <Text style={styles.additionalInfoText}>
-                    {typeof selectedNotification.additional_data === 'string' 
-                      ? selectedNotification.additional_data 
-                      : JSON.stringify(selectedNotification.additional_data, null, 2)}
-                  </Text>
-                </View>
-              )}
+              {/* ❌ REMOVED: Additional info section - ini yang sering bikin force close */}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -600,23 +645,6 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 22,
     marginBottom: 16,
-  },
-  additionalInfo: {
-    backgroundColor: '#f8f9fa',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  additionalInfoLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  additionalInfoText: {
-    fontSize: 12,
-    color: '#666',
-    fontFamily: 'monospace',
   },
   modalFooter: {
     padding: 20,

@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react'
 import { Image, StyleSheet, Text, View } from 'react-native'
 import Logo from '../../assets/bumpnqslash.png'
+// import Logo from '../../assets/hrisyg.png'
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SplashScreen = ({navigation}) => {
@@ -18,6 +20,8 @@ const SplashScreen = ({navigation}) => {
         } else {
           // Jika tidak ada token, ke Login
           navigation.replace('Login');
+          // navigation.replace('LoginAccount');
+
         }
       }, 2000);
       
@@ -36,6 +40,9 @@ const SplashScreen = ({navigation}) => {
   
   return (
     <View style={{flex: 1, backgroundColor: '#5EC898', justifyContent: 'center'}}>
+    {/* <View style={{flex: 1, backgroundColor: 'white', justifyContent: 'center'}}> */}
+    
+
       <View style={{alignItems: 'center'}}>
         <Image source={Logo} style={{width: 300, height: 300}} />
         <View style={{marginTop: -10, alignItems: 'center'}}>

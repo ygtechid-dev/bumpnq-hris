@@ -13,11 +13,16 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  Modal,
+  TextInput,
+  Platform,
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 // Import background
 import BgHeader from '../../assets/bgheaderbump.png';
@@ -40,8 +45,19 @@ const HomeScreen = ({ navigation }) => {
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  // State baru untuk notifikasi
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [attendanceError, setAttendanceError] = useState(false);
+  
+  // State untuk Worksheet
+  const [worksheets, setWorksheets] = useState([]);
+  const [worksheetLoading, setWorksheetLoading] = useState(false);
+  
+  // State untuk Modal Checklist
+  const [checklistModalVisible, setChecklistModalVisible] = useState(false);
+  const [selectedWorksheet, setSelectedWorksheet] = useState(null);
+  const [notes, setNotes] = useState('');
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [submittingChecklist, setSubmittingChecklist] = useState(false);
 
   // Timer untuk update waktu setiap detik
   useEffect(() => {
@@ -77,18 +93,19 @@ const HomeScreen = ({ navigation }) => {
         loadShiftSchedule();
         loadUpcomingSchedules();
         loadUnreadNotifications(); 
+        loadTodayWorksheets(); // Load worksheets
       }
     }, [userData])
   );
 
   // Helper function untuk format tanggal konsisten
   const formatDateToYMD = (date) => {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   // Helper function untuk cek apakah tanggal sama
   const isSameDate = (date1, date2) => {
@@ -155,8 +172,6 @@ const HomeScreen = ({ navigation }) => {
       if (response.ok) {
         const result = await response.json();
         const notifications = result.notifications || [];
-        
-        // Hitung notifikasi yang belum dibaca
         const unreadCount = notifications.filter(notification => !notification.is_read).length;
         console.log('Unread notifications count:', unreadCount);
         setUnreadNotifications(unreadCount);
@@ -170,6 +185,248 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  // =================== WORKSHEET FUNCTIONS ===================
+  
+  // Load worksheets hari ini
+  const loadTodayWorksheets = async () => {
+    if (!userData?.user?.id) return;
+    
+    setWorksheetLoading(true);
+    try {
+      console.log('🔄 Loading today worksheets...');
+      
+      // Generate worksheets untuk hari ini
+      const generateResponse = await fetch(`${API_URL}/api/worksheets/generate-today`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: userData.user.id
+        })
+      });
+
+      if (generateResponse.ok) {
+        const result = await generateResponse.json();
+        console.log('✅ Worksheets loaded:', result.worksheets?.length || 0);
+        setWorksheets(result.worksheets || []);
+      } else {
+        console.log('❌ Failed to load worksheets');
+        setWorksheets([]);
+      }
+    } catch (error) {
+      console.log('❌ Error loading worksheets:', error);
+      setWorksheets([]);
+    } finally {
+      setWorksheetLoading(false);
+    }
+  };
+
+  // Handle open checklist modal
+  const handleOpenChecklistModal = (worksheet) => {
+    setSelectedWorksheet(worksheet);
+    setNotes('');
+    setUploadedImage(null);
+    setChecklistModalVisible(true);
+  };
+
+  // Handle close modal
+  const handleCloseChecklistModal = () => {
+    setChecklistModalVisible(false);
+    setSelectedWorksheet(null);
+    setNotes('');
+    setUploadedImage(null);
+  };
+
+  // Handle pilih gambar
+  const handlePickImage = () => {
+    Alert.alert(
+      'Upload Foto',
+      'Pilih sumber foto',
+      [
+        {
+          text: 'Kamera',
+          onPress: () => openCamera(),
+        },
+        {
+          text: 'Galeri',
+          onPress: () => openGallery(),
+        },
+        {
+          text: 'Batal',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+ 
+const openCamera = async () => {
+  let permission;
+
+  if (Platform.OS === 'android') {
+    permission = PERMISSIONS.ANDROID.CAMERA;
+  } else {
+    permission = PERMISSIONS.IOS.CAMERA;
+  }
+
+  const result = await check(permission);
+  if (result !== RESULTS.GRANTED) {
+    const reqResult = await request(permission);
+    if (reqResult !== RESULTS.GRANTED) {
+      Alert.alert('Izin Diperlukan', 'Kamera tidak dapat digunakan tanpa izin.');
+      return;
+    }
+  }
+
+  // Jika izin sudah diberikan, jalankan kamera
+  const options = {
+    mediaType: 'photo',
+    quality: 0.8,
+    saveToPhotos: false,
+  };
+
+  launchCamera(options, (response) => {
+    if (response.didCancel) {
+      console.log('User cancelled camera');
+    } else if (response.errorCode) {
+      console.log('Camera Error: ', response.errorMessage);
+      Alert.alert('Error', 'Gagal membuka kamera');
+    } else if (response.assets && response.assets.length > 0) {
+      setUploadedImage(response.assets[0]);
+    }
+  });
+};
+
+  const openGallery = () => {
+    const options = {
+      mediaType: 'photo',
+      quality: 0.8,
+    };
+
+    launchImageLibrary(options, (response) => {
+      if (response.didCancel) {
+        console.log('User cancelled image picker');
+      } else if (response.errorCode) {
+        console.log('ImagePicker Error: ', response.errorMessage);
+        Alert.alert('Error', 'Gagal membuka galeri');
+      } else if (response.assets && response.assets.length > 0) {
+        setUploadedImage(response.assets[0]);
+      }
+    });
+  };
+
+  // Handle submit checklist
+  const handleSubmitChecklist = async () => {
+    if (!selectedWorksheet) return;
+
+    setSubmittingChecklist(true);
+    try {
+      const formData = new FormData();
+      formData.append('is_completed', 'true');
+      
+      if (notes.trim()) {
+        formData.append('notes', notes.trim());
+      }
+
+      if (uploadedImage) {
+        formData.append('image', {
+          uri: uploadedImage.uri,
+          type: uploadedImage.type || 'image/jpeg',
+          name: uploadedImage.fileName || `worksheet_${Date.now()}.jpg`,
+        });
+      }
+
+      console.log('📤 Submitting checklist for worksheet:', selectedWorksheet.id);
+
+      const response = await fetch(
+        `${API_URL}/api/worksheets/${selectedWorksheet.id}/complete`,
+        {
+          method: 'PUT',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Checklist submitted successfully');
+        
+        Alert.alert(
+          'Berhasil',
+          'Task berhasil diselesaikan!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                handleCloseChecklistModal();
+                loadTodayWorksheets(); // Reload worksheets
+              },
+            },
+          ]
+        );
+      } else {
+        const errorData = await response.json();
+        console.log('❌ Failed to submit checklist:', errorData);
+        Alert.alert('Error', errorData.error || 'Gagal menyelesaikan task');
+      }
+    } catch (error) {
+      console.log('❌ Error submitting checklist:', error);
+      Alert.alert('Error', 'Terjadi kesalahan saat menyelesaikan task');
+    } finally {
+      setSubmittingChecklist(false);
+    }
+  };
+
+  // Handle uncheck task
+  const handleUncheckTask = async (worksheet) => {
+    Alert.alert(
+      'Batalkan Checklist',
+      'Apakah Anda yakin ingin membatalkan checklist task ini?',
+      [
+        {
+          text: 'Batal',
+          style: 'cancel',
+        },
+        {
+          text: 'Ya',
+          onPress: async () => {
+            try {
+              const formData = new FormData();
+              formData.append('is_completed', 'false');
+
+              const response = await fetch(
+                `${API_URL}/api/worksheets/${worksheet.id}/complete`,
+                {
+                  method: 'PUT',
+                  body: formData,
+                  headers: {
+                    'Content-Type': 'multipart/form-data',
+                  },
+                }
+              );
+
+              if (response.ok) {
+                console.log('✅ Task unchecked successfully');
+                loadTodayWorksheets(); // Reload worksheets
+              } else {
+                Alert.alert('Error', 'Gagal membatalkan checklist');
+              }
+            } catch (error) {
+              console.log('❌ Error unchecking task:', error);
+              Alert.alert('Error', 'Terjadi kesalahan');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // =================== END WORKSHEET FUNCTIONS ===================
+
   // Fungsi untuk load semua data sekaligus
   const loadAllData = async () => {
     try {
@@ -179,7 +436,8 @@ const HomeScreen = ({ navigation }) => {
         loadUpcomingSchedules(),
         loadTodayAttendance(),
         loadAttendanceHistory(),
-        loadUnreadNotifications() // Tambahkan load notifikasi
+        loadUnreadNotifications(),
+        loadTodayWorksheets() // Tambahkan load worksheets
       ]);
     } catch (error) {
       console.log('Error loading all data:', error);
@@ -197,28 +455,19 @@ const HomeScreen = ({ navigation }) => {
         `${API_URL}/api/shift-schedules?user_id=${userData.user.id}&start_date=${today}&end_date=${today}`
       );
       
-      console.log('====================================');
-      console.log('Shift Schedule Response Status:', response.status);
-      console.log('====================================');
-      
       if (response.ok) {
         const result = await response.json();
-        console.log('Shift Schedule Result:', result);
         
         if (result.shift_schedules && result.shift_schedules.length > 0) {
-          // Filter data berdasarkan tanggal yang sama persis
           const todayShift = result.shift_schedules.find(item => 
             isSameDate(item.shift_date, today)
           );
           
-          console.log('Today Shift Found:', todayShift);
           setShiftSchedule(todayShift || null);
         } else {
-          console.log('No shift schedule found for today');
           setShiftSchedule(null);
         }
       } else {
-        console.log('Failed to load shift schedule, status:', response.status);
         setShiftSchedule(null);
       }
     } catch (error) {
@@ -227,7 +476,6 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  // Fungsi baru untuk load jadwal besok dan lusa
   const loadUpcomingSchedules = async () => {
     if (!userData?.user?.id) return;
     
@@ -235,18 +483,12 @@ const HomeScreen = ({ navigation }) => {
       const tomorrow = getTomorrowDate();
       const dayAfter = getDayAfterTomorrowDate();
       
-      // Get schedules for the next 2 days
       const response = await fetch(
         `${API_URL}/api/shift-schedules?user_id=${userData.user.id}&start_date=${tomorrow}&end_date=${dayAfter}`
       );
       
-      console.log('====================================');
-      console.log('Upcoming Schedules Response Status:', response.status);
-      console.log('====================================');
-      
       if (response.ok) {
         const result = await response.json();
-        console.log('Upcoming Schedules Result:', result);
         
         if (result.shift_schedules && result.shift_schedules.length > 0) {
           const tomorrowShift = result.shift_schedules.find(item => 
@@ -257,19 +499,14 @@ const HomeScreen = ({ navigation }) => {
             isSameDate(item.shift_date, dayAfter)
           );
           
-          console.log('Tomorrow Shift Found:', tomorrowShift);
-          console.log('Day After Shift Found:', dayAfterShift);
-          
           setUpcomingSchedules({
             tomorrow: tomorrowShift || null,
             dayAfter: dayAfterShift || null
           });
         } else {
-          console.log('No upcoming schedules found');
           setUpcomingSchedules({ tomorrow: null, dayAfter: null });
         }
       } else {
-        console.log('Failed to load upcoming schedules, status:', response.status);
         setUpcomingSchedules({ tomorrow: null, dayAfter: null });
       }
     } catch (error) {
@@ -282,42 +519,32 @@ const HomeScreen = ({ navigation }) => {
     if (!userData?.user?.id) return;
     
     try {
+      setAttendanceError(false); // Reset error state
       const today = getTodayDate();
       const response = await fetch(
         `${API_URL}/api/attendance?user_id=${userData.user.id}&start_date=${today}&end_date=${today}`
       );
       
-      console.log('====================================');
-      console.log('Attendance API URL:', 
-        `${API_URL}/api/attendance?user_id=${userData.user.id}&start_date=${today}&end_date=${today}`
-      );
-      console.log('Attendance Response Status:', response.status);
-      console.log('====================================');
-      
       if (response.ok) {
         const result = await response.json();
-        console.log('====================================');
-        console.log('Attendance Result:', result);
-        console.log('====================================');
         
         if (result.attendance && result.attendance.length > 0) {
-          // Filter data berdasarkan tanggal yang sama persis
           const todayData = result.attendance.find(item => 
             isSameDate(item.date, today)
           );
-          console.log('Today Attendance Found:', todayData);
           
           setTodayAttendance(todayData || null);
         } else {
-          console.log('No attendance found for today');
           setTodayAttendance(null);
         }
       } else {
-        console.log('Failed to load today attendance, status:', response.status);
+        console.log('❌ Failed to load today attendance - status:', response.status);
+        setAttendanceError(true);
         setTodayAttendance(null);
       }
     } catch (error) {
-      console.log('Error loading today attendance:', error);
+      console.log('❌ Error loading today attendance:', error);
+      setAttendanceError(true);
       setTodayAttendance(null);
     }
   };
@@ -326,7 +553,6 @@ const HomeScreen = ({ navigation }) => {
     if (!userData?.user?.id) return;
     
     try {
-      // Get last 30 days to show more data
       const endDate = getTodayDate();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
@@ -336,18 +562,12 @@ const HomeScreen = ({ navigation }) => {
         `${API_URL}/api/attendance?user_id=${userData.user.id}&start_date=${startDateStr}&end_date=${endDate}`
       );
 
-      console.log('====================================');
-      console.log('Attendance History Response Status:', response.status);
-      console.log('====================================');
-      
       if (response.ok) {
         const result = await response.json();
-        console.log('Attendance History Result:', result);
         
         if (result.attendance) {
           const today = getTodayDate();
           
-          // Process all attendance data - create entries for both check-in and check-out
           let formattedHistory = [];
           
           result.attendance.forEach(item => {
@@ -358,7 +578,6 @@ const HomeScreen = ({ navigation }) => {
               ? formatTimeFromISO(item.check_out.time)
               : null;
 
-            // Add check-in entry if exists
             if (checkInTime) {
               formattedHistory.push({
                 id: `${item.id}_in`,
@@ -373,7 +592,6 @@ const HomeScreen = ({ navigation }) => {
               });
             }
 
-            // Add check-out entry if exists
             if (checkOutTime) {
               formattedHistory.push({
                 id: `${item.id}_out`,
@@ -389,22 +607,33 @@ const HomeScreen = ({ navigation }) => {
             }
           });
 
-          // Sort by datetime descending (most recent first)
           formattedHistory.sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
 
-          console.log('Formatted History:', formattedHistory.length, 'entries');
           setAttendanceHistory(formattedHistory);
         } else {
-          console.log('No attendance history found');
           setAttendanceHistory([]);
         }
       } else {
-        console.log('Failed to load attendance history, status:', response.status);
         setAttendanceHistory([]);
       }
     } catch (error) {
       console.log('Error loading attendance history:', error);
       setAttendanceHistory([]);
+    }
+  };
+
+  // Fungsi untuk refresh attendance data
+  const handleRefreshAttendance = async () => {
+    setLoading(true);
+    try {
+      await loadTodayAttendance();
+      if (!attendanceError) {
+        Alert.alert('Berhasil', 'Data berhasil dimuat ulang');
+      }
+    } catch (error) {
+      console.log('Error refreshing attendance:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -435,23 +664,19 @@ const HomeScreen = ({ navigation }) => {
     });
   };
 
-  // Format shift start time to HH:MM format
   const getShiftStartTime = (shift = null) => {
     const shiftToUse = shift || shiftSchedule;
     if (shiftToUse && shiftToUse.shifts && shiftToUse.shifts.start_time) {
       const startTime = shiftToUse.shifts.start_time;
-      // If it's in HH:MM:SS format, extract only HH:MM
       if (startTime.includes(':')) {
         const parts = startTime.split(':');
         return `${parts[0]}:${parts[1]}`;
       }
       return startTime;
     }
-    return 'Tidak Ada Jadwal'; // Default jika tidak ada shift
+    return 'Tidak Ada Jadwal';
   };
 
-  // Fungsi baru untuk mendapatkan text jadwal hari ini
-// Fungsi untuk mendapatkan waktu pulang dari shift
   const getShiftEndTime = () => {
     if (shiftSchedule && shiftSchedule.shifts && shiftSchedule.shifts.end_time) {
       const endTime = shiftSchedule.shifts.end_time;
@@ -464,65 +689,56 @@ const HomeScreen = ({ navigation }) => {
     return null;
   };
 
-const getShiftBreakOutTime = () => {
-  if (shiftSchedule && shiftSchedule.shifts && shiftSchedule.shifts.break_out_time) {
-    const breakOutTime = shiftSchedule.shifts.break_out_time;
-    if (breakOutTime.includes(':')) {
-      const parts = breakOutTime.split(':');
-      return `${parts[0]}:${parts[1]}`;
+  const getShiftBreakOutTime = () => {
+    if (shiftSchedule && shiftSchedule.shifts && shiftSchedule.shifts.break_out_time) {
+      const breakOutTime = shiftSchedule.shifts.break_out_time;
+      if (breakOutTime.includes(':')) {
+        const parts = breakOutTime.split(':');
+        return `${parts[0]}:${parts[1]}`;
+      }
+      return breakOutTime;
     }
-    return breakOutTime;
-  }
-  return null;
-};
+    return null;
+  };
 
-// Fungsi untuk mendapatkan waktu break in dari shift
-const getShiftBreakInTime = () => {
-  if (shiftSchedule && shiftSchedule.shifts && shiftSchedule.shifts.break_in_time) {
-    const breakInTime = shiftSchedule.shifts.break_in_time;
-    if (breakInTime.includes(':')) {
-      const parts = breakInTime.split(':');
-      return `${parts[0]}:${parts[1]}`;
+  const getShiftBreakInTime = () => {
+    if (shiftSchedule && shiftSchedule.shifts && shiftSchedule.shifts.break_in_time) {
+      const breakInTime = shiftSchedule.shifts.break_in_time;
+      if (breakInTime.includes(':')) {
+        const parts = breakInTime.split(':');
+        return `${parts[0]}:${parts[1]}`;
+      }
+      return breakInTime;
     }
-    return breakInTime;
-  }
-  return null;
-};
+    return null;
+  };
 
-  // Fungsi baru untuk mendapatkan text jadwal hari ini
   const getTodayScheduleText = () => {
     if (!shiftSchedule || !shiftSchedule.shifts || !shiftSchedule.shifts.start_time) {
       return "Tidak Ada Jadwal/Libur";
     }
 
-    // Cek status absensi untuk menentukan jadwal mana yang ditampilkan
     if (!todayAttendance) {
-      // Belum ada absensi sama sekali
       return `Jadwal Masuk: ${getShiftStartTime()} WIB`;
     }
 
-    // Belum check in
     if (!todayAttendance.check_in?.time) {
       return `Jadwal Masuk: ${getShiftStartTime()} WIB`;
     }
 
-    // Sudah check in, belum break out (istirahat)
     if (todayAttendance.check_in?.time && !todayAttendance.break_out?.time) {
       return `Jadwal Istirahat: ${getShiftBreakOutTime()} WIB`;
     }
 
-    // Sudah istirahat, belum kembali dari istirahat
     if (todayAttendance.break_out?.time && !todayAttendance.break_in?.time) {
       return `Jadwal Kembali: ${getShiftBreakInTime()} WIB`;
     }
 
-    // Sudah kembali dari istirahat, belum check out
     if (todayAttendance.break_in?.time && !todayAttendance.check_out?.time) {
       const endTime = getShiftEndTime();
       return endTime ? `Jadwal Pulang: ${endTime} WIB` : "Jadwal Pulang";
     }
 
-    // Sudah selesai semua
     if (todayAttendance.check_out?.time) {
       return "Absensi Hari Ini Selesai";
     }
@@ -530,17 +746,14 @@ const getShiftBreakInTime = () => {
     return `Jadwal Masuk: ${getShiftStartTime()} WIB`;
   };
 
-  // Fungsi untuk cek apakah ada status pending
   const hasPendingAttendance = () => {
     if (!todayAttendance) return false;
     
-    // Cek semua status attendance hari ini
     const checkInStatus = todayAttendance.check_in?.status;
     const checkOutStatus = todayAttendance.check_out?.status;
     const breakInStatus = todayAttendance.break_in?.status;
     const breakOutStatus = todayAttendance.break_out?.status;
     
-    // Jika ada yang pending, return true
     return checkInStatus === 'Pending' || 
            checkOutStatus === 'Pending' || 
            breakInStatus === 'Pending' || 
@@ -558,7 +771,6 @@ const getShiftBreakInTime = () => {
       };
     }
     
-    // Belum check in
     if (!todayAttendance.check_in?.time) {
       return {
         type: 'check_in',
@@ -569,7 +781,6 @@ const getShiftBreakInTime = () => {
       };
     }
     
-    // Sudah check in, belum break out (istirahat)
     if (todayAttendance.check_in?.time && !todayAttendance.break_out?.time) {
       return {
         type: 'break_out',
@@ -580,7 +791,6 @@ const getShiftBreakInTime = () => {
       };
     }
     
-    // Sudah istirahat, belum kembali dari istirahat
     if (todayAttendance.break_out?.time && !todayAttendance.break_in?.time) {
       const breakOutTime = formatTimeFromISO(todayAttendance.break_out.time);
       return {
@@ -592,7 +802,6 @@ const getShiftBreakInTime = () => {
       };
     }
     
-    // Sudah kembali dari istirahat, belum check out
     if (todayAttendance.break_in?.time && !todayAttendance.check_out?.time) {
       return {
         type: 'check_out',
@@ -603,7 +812,6 @@ const getShiftBreakInTime = () => {
       };
     }
     
-    // Sudah selesai semua
     if (todayAttendance.check_out?.time) {
       const checkOutTime = formatTimeFromISO(todayAttendance.check_out.time);
       return {
@@ -624,8 +832,22 @@ const getShiftBreakInTime = () => {
     };
   };
 
-  // Fungsi untuk handle tap absen dengan validasi pending
   const handleAbsenPress = () => {
+    // Cek jika ada error attendance
+    if (attendanceError) {
+      Alert.alert(
+        'Error Memuat Data',
+        'Tidak dapat memuat data absensi. Silakan refresh terlebih dahulu.',
+        [
+          {
+            text: 'OK',
+            style: 'default'
+          }
+        ]
+      );
+      return;
+    }
+
     if (hasPendingAttendance()) {
       Alert.alert(
         'Absensi Pending',
@@ -640,14 +862,11 @@ const getShiftBreakInTime = () => {
       return;
     }
     
-    // Jika tidak ada pending, lanjutkan ke camera
     navigation.navigate('Camera');
   };
 
-  // Handler untuk navigasi ke NotificationScreen dengan refresh badge
   const handleNotificationPress = () => {
     navigation.navigate('NotificationScreen');
-    // Refresh unread count setelah berpindah ke notification screen
     setTimeout(() => {
       loadUnreadNotifications();
     }, 1000);
@@ -691,165 +910,408 @@ const getShiftBreakInTime = () => {
     );
   }
 
+  // Calculate worksheet progress
+  const completedTasks = worksheets.filter(w => w.is_completed).length;
+  const totalTasks = worksheets.length;
+  const completionPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#5EC898" barStyle="light-content" />
       
-      {/* Header Section */}
-      <ImageBackground source={BgHeader} style={styles.headerBackground}>
-        <View style={styles.headerContent}>
-          <View style={styles.userInfo}>
-            <Image 
-              source={{ uri: userData?.user.profile_image || 'https://via.placeholder.com/50' }} 
-              style={styles.avatar} 
-            />
-            <View style={styles.userDetails}>
-              <Text style={styles.position}>{userData?.user.position || ''}</Text>
-              <Text style={styles.userName}>{userData?.user.full_name || ''}</Text>
-            </View>
-          </View>
-          <TouchableOpacity 
-            style={styles.notificationButton} 
-            onPress={handleNotificationPress}
-          >
-            <FontAwesome5 name="bell" size={20} color="black" />
-            {/* Badge untuk notifikasi yang belum dibaca */}
-            {unreadNotifications > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>
-                  {unreadNotifications > 99 ? '99+' : unreadNotifications}
-                </Text>
+      {/* Wrap everything in ScrollView */}
+      <ScrollView 
+        style={styles.mainScrollView} 
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
+        {/* Header Section */}
+        <ImageBackground source={BgHeader} style={styles.headerBackground}>
+          <View style={styles.headerContent}>
+            <View style={styles.userInfo}>
+              <Image 
+                source={{ uri: userData?.user.profile_image || 'https://via.placeholder.com/50' }} 
+                style={styles.avatar} 
+              />
+              <View style={styles.userDetails}>
+                <Text style={styles.position}>{userData?.user.position || ''}</Text>
+                <Text style={styles.userName}>{userData?.user.full_name || ''}</Text>
               </View>
-            )}
-          </TouchableOpacity>
-        </View>
-      </ImageBackground>
-
-      {/* Attendance Card */}
-      <View style={styles.attendanceCard}>
-        <Text style={styles.dateText}>{formatDate(currentTime)}</Text>
-        <Text style={styles.absenTitle}>
-          {getTodayScheduleText()}
-        </Text>
-        
-        {/* Upcoming Schedules */}
-        <View style={styles.upcomingSchedulesContainer}>
-          <View style={styles.scheduleRow}>
-            <Text style={styles.scheduleLabel}>
-              Besok ({getDayName(getTomorrowDate())}):
-            </Text>
-            <Text style={styles.scheduleTime}>
-              {upcomingSchedules.tomorrow 
-                ? `${getShiftStartTime(upcomingSchedules.tomorrow)} WIB`
-                : 'Belum ada jadwal/Libur'
-              }
-            </Text>
-          </View>
-          <View style={styles.scheduleRow}>
-            <Text style={styles.scheduleLabel}>
-              Lusa ({getDayAfterTomorrowDate()}):
-            </Text>
-            <Text style={styles.scheduleTime}>
-              {upcomingSchedules.dayAfter 
-                ? `${getShiftStartTime(upcomingSchedules.dayAfter)} WIB`
-                : 'Belum ada jadwal/Libur'
-              }
-            </Text>
-          </View>
-          
-          {/* Tombol Cek Jadwal Lengkap */}
-          <TouchableOpacity 
-            style={styles.fullScheduleButton}
-            onPress={() => navigation.navigate('InformationStructureScreen')} // Ganti dengan nama screen jadwal lengkap
-          >
-            <FontAwesome5 name="calendar-alt" size={14} color="#5EC898" style={styles.calendarIcon} />
-            <Text style={styles.fullScheduleText}>Cek Jadwal Lengkap</Text>
-            <FontAwesome5 name="chevron-right" size={12} color="#5EC898" />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.restTimeContainer}>
-          <Text style={styles.restLabel}>{currentStatus.title}</Text>
-          <Text style={[styles.restTime, { color: currentStatus.color }]}>
-            {currentStatus.text}
-          </Text>
-          {/* Tampilkan warning jika ada status pending */}
-          {hasPendingAttendance() && (
-            <View style={styles.pendingWarning}>
-              <FontAwesome5 name="exclamation-triangle" size={14} color="#FF9800" />
-              <Text style={styles.pendingText}>Status absensi pending</Text>
             </View>
-          )}
-        </View>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Menu Grid */}
-        <View style={styles.menuGrid}>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity key={index} style={styles.menuItem} onPress={item.onPress}>
-              <View style={[styles.menuIconContainer, { backgroundColor: 'white' }]}>
-                <Image source={item.icon} style={{width: 20, height: 20}} />
-              </View>
-              <Text style={styles.menuText}>{item.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Riwayat Absensi Section */}
-        <View style={styles.riwayatSection}>
-          <View style={styles.riwayatHeader}>
-            <Text style={styles.riwayatTitle}>Riwayat Absensi</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('RiwayatKehadiran')}>
-              <Text style={styles.lihatSemua}>Lihat Semua</Text>
-            </TouchableOpacity>
-          </View>
-
-          {attendanceHistory.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>Belum ada riwayat absensi</Text>
-            </View>
-          ) : (
-            attendanceHistory.slice(0, 5).map((item, index) => (
-              <View key={index} style={styles.absensiItem}>
-                <View style={styles.absensiLeft}>
-                  <View style={[
-                    styles.avatarContainer, 
-                    item.status === 'in' ? styles.avatarIn : styles.avatarOut
-                  ]}>
-                    <Text style={styles.avatarText}>{item.avatar}</Text>
-                    <View style={[
-                      styles.statusIndicator, 
-                      item.status === 'in' ? styles.statusIn : styles.statusOut
-                    ]}>
-                      <FontAwesome5 
-                        name={item.status === 'in' ? 'arrow-right' : 'arrow-left'} 
-                        size={8} 
-                        color="white" 
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.absensiInfo}>
-                    <Text style={styles.absensiName}>{item.name}</Text>
-                    <Text style={styles.absensiPosition}>{item.position}</Text>
-                  </View>
-                </View>
-                <View style={[
-                  styles.timeContainer, 
-                  item.status === 'in' ? styles.timeIn : styles.timeOut
-                ]}>
-                  <Text style={[
-                    styles.timeText,
-                    { color: item.status === 'in' ? '#4CAF50' : '#FF6B6B' }
-                  ]}>
-                    {item.time} WIB
+            <TouchableOpacity 
+              style={styles.notificationButton} 
+              onPress={handleNotificationPress}
+            >
+              <FontAwesome5 name="bell" size={20} color="black" />
+              {unreadNotifications > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
                   </Text>
                 </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </ImageBackground>
+
+        {/* Content Container */}
+        <View style={styles.contentContainer}>
+          {/* Attendance Card */}
+          <View style={styles.attendanceCard}>
+            <Text style={styles.dateText}>{formatDate(currentTime)}</Text>
+            <Text style={styles.absenTitle}>
+              {getTodayScheduleText()}
+            </Text>
+            
+            {/* Upcoming Schedules */}
+            <View style={styles.upcomingSchedulesContainer}>
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>
+                  Besok ({getDayName(getTomorrowDate())}):
+                </Text>
+                <Text style={styles.scheduleTime}>
+                  {upcomingSchedules.tomorrow 
+                    ? `${getShiftStartTime(upcomingSchedules.tomorrow)} WIB`
+                    : 'Belum ada jadwal/Libur'
+                  }
+                </Text>
               </View>
-            ))
-          )}
+              <View style={styles.scheduleRow}>
+                <Text style={styles.scheduleLabel}>
+                  Lusa ({getDayAfterTomorrowDate()}):
+                </Text>
+                <Text style={styles.scheduleTime}>
+                  {upcomingSchedules.dayAfter 
+                    ? `${getShiftStartTime(upcomingSchedules.dayAfter)} WIB`
+                    : 'Belum ada jadwal/Libur'
+                  }
+                </Text>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.fullScheduleButton}
+                onPress={() => navigation.navigate('InformationStructureScreen')}
+              >
+                <FontAwesome5 name="calendar-alt" size={14} color="#5EC898" style={styles.calendarIcon} />
+                <Text style={styles.fullScheduleText}>Cek Jadwal Lengkap</Text>
+                <FontAwesome5 name="chevron-right" size={12} color="#5EC898" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.restTimeContainer}>
+              <Text style={styles.restLabel}>{currentStatus.title}</Text>
+              <Text style={[styles.restTime, { color: currentStatus.color }]}>
+                {currentStatus.text}
+              </Text>
+              
+              {/* Error Warning untuk Attendance */}
+              {attendanceError && (
+                <View style={styles.errorWarning}>
+                  <FontAwesome5 name="exclamation-circle" size={14} color="#FF6B6B" />
+                  <Text style={styles.errorText}>Gagal memuat data absensi</Text>
+                </View>
+              )}
+              
+              {hasPendingAttendance() && !attendanceError && (
+                <View style={styles.pendingWarning}>
+                  <FontAwesome5 name="exclamation-triangle" size={14} color="#FF9800" />
+                  <Text style={styles.pendingText}>Status absensi pending</Text>
+                </View>
+              )}
+              
+              {/* Tombol Refresh ketika ada error */}
+              {attendanceError && (
+                <TouchableOpacity 
+                  style={styles.refreshButton}
+                  onPress={handleRefreshAttendance}
+                >
+                  <FontAwesome5 name="sync-alt" size={14} color="white" style={styles.refreshIcon} />
+                  <Text style={styles.refreshButtonText}>Refresh Data</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* Menu Grid */}
+          <View style={styles.menuGrid}>
+            {menuItems.map((item, index) => (
+              <TouchableOpacity key={index} style={styles.menuItem} onPress={item.onPress}>
+                <View style={[styles.menuIconContainer, { backgroundColor: 'white' }]}>
+                  <Image source={item.icon} style={{width: 20, height: 20}} />
+                </View>
+                <Text style={styles.menuText}>{item.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* =================== WORKSHEET SECTION =================== */}
+          <View style={styles.worksheetSection}>
+            <View style={styles.worksheetHeader}>
+              <View style={styles.worksheetTitleContainer}>
+                <FontAwesome5 name="clipboard-list" size={18} color="#333" style={styles.worksheetIcon} />
+                <Text style={styles.worksheetTitle}>Task Hari Ini</Text>
+              </View>
+              {totalTasks > 0 && (
+                <View style={styles.progressBadge}>
+                  <Text style={styles.progressText}>
+                    {completedTasks}/{totalTasks}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {worksheetLoading ? (
+              <View style={styles.worksheetLoading}>
+                <ActivityIndicator size="small" color="#5EC898" />
+                <Text style={styles.loadingSmallText}>Memuat task...</Text>
+              </View>
+            ) : worksheets.length === 0 ? (
+              <View style={styles.emptyWorksheet}>
+                <FontAwesome5 name="clipboard-check" size={40} color="#DDD" />
+                <Text style={styles.emptyWorksheetText}>Tidak ada task untuk hari ini</Text>
+              </View>
+            ) : (
+              <>
+                {/* Progress Bar */}
+                <View style={styles.progressBarContainer}>
+                  <View style={styles.progressBarBackground}>
+                    <View 
+                      style={[
+                        styles.progressBarFill, 
+                        { width: `${completionPercentage}%` }
+                      ]} 
+                    />
+                  </View>
+                  <Text style={styles.progressPercentage}>
+                    {Math.round(completionPercentage)}% Selesai
+                  </Text>
+                </View>
+
+                {/* Task List */}
+                {worksheets.map((worksheet, index) => (
+                  <TouchableOpacity
+                    key={worksheet.id}
+                    style={[
+                      styles.worksheetItem,
+                      worksheet.is_completed && styles.worksheetItemCompleted
+                    ]}
+                    onPress={() => {
+                      if (worksheet.is_completed) {
+                        handleUncheckTask(worksheet);
+                      } else {
+                        handleOpenChecklistModal(worksheet);
+                      }
+                    }}
+                  >
+                    <View style={styles.worksheetItemLeft}>
+                      <View style={[
+                        styles.checkboxContainer,
+                        worksheet.is_completed && styles.checkboxChecked
+                      ]}>
+                        {worksheet.is_completed && (
+                          <FontAwesome5 name="check" size={14} color="white" />
+                        )}
+                      </View>
+                      <View style={styles.worksheetItemContent}>
+                        <Text style={[
+                          styles.worksheetItemTitle,
+                          worksheet.is_completed && styles.worksheetItemTitleCompleted
+                        ]}>
+                          {worksheet.task_templates?.title || 'Task'}
+                        </Text>
+                        {worksheet.task_templates?.category && (
+                          <View style={styles.categoryBadge}>
+                            <Text style={styles.categoryText}>
+                              {worksheet.task_templates.category}
+                            </Text>
+                          </View>
+                        )}
+                        {worksheet.is_completed && worksheet.completed_at && (
+                          <Text style={styles.completedTime}>
+                            Selesai: {formatTimeFromISO(worksheet.completed_at)} WIB
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <FontAwesome5 
+                      name="chevron-right" 
+                      size={14} 
+                      color={worksheet.is_completed ? '#999' : '#5EC898'} 
+                    />
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+          </View>
+          {/* =================== END WORKSHEET SECTION =================== */}
+
+          {/* Riwayat Absensi Section */}
+          <View style={styles.riwayatSection}>
+            <View style={styles.riwayatHeader}>
+              <Text style={styles.riwayatTitle}>Riwayat Absensi</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('RiwayatKehadiran')}>
+                <Text style={styles.lihatSemua}>Lihat Semua</Text>
+              </TouchableOpacity>
+            </View>
+
+            {attendanceHistory.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>Belum ada riwayat absensi</Text>
+              </View>
+            ) : (
+              attendanceHistory.slice(0, 5).map((item, index) => (
+                <View key={index} style={styles.absensiItem}>
+                  <View style={styles.absensiLeft}>
+                    <View style={[
+                      styles.avatarContainer, 
+                      item.status === 'in' ? styles.avatarIn : styles.avatarOut
+                    ]}>
+                      <Text style={styles.avatarText}>{item.avatar}</Text>
+                      <View style={[
+                        styles.statusIndicator, 
+                        item.status === 'in' ? styles.statusIn : styles.statusOut
+                      ]}>
+                        <FontAwesome5 
+                          name={item.status === 'in' ? 'arrow-right' : 'arrow-left'} 
+                          size={8} 
+                          color="white" 
+                        />
+                      </View>
+                    </View>
+                    <View style={styles.absensiInfo}>
+                      <Text style={styles.absensiName}>{item.name}</Text>
+                      <Text style={styles.absensiPosition}>{item.position}</Text>
+                    </View>
+                  </View>
+                  <View style={[
+                    styles.timeContainer, 
+                    item.status === 'in' ? styles.timeIn : styles.timeOut
+                  ]}>
+                    <Text style={[
+                      styles.timeText,
+                      { color: item.status === 'in' ? '#4CAF50' : '#FF6B6B' }
+                    ]}>
+                      {item.time} WIB
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
         </View>
       </ScrollView>
+
+      {/* =================== CHECKLIST MODAL =================== */}
+      <Modal
+        visible={checklistModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleCloseChecklistModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Selesaikan Task</Text>
+              <TouchableOpacity onPress={handleCloseChecklistModal}>
+                <FontAwesome5 name="times" size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {selectedWorksheet && (
+                <>
+                  <View style={styles.taskDetailCard}>
+                    <Text style={styles.taskDetailTitle}>
+                      {selectedWorksheet.task_templates?.title}
+                    </Text>
+                    {selectedWorksheet.task_templates?.description && (
+                      <Text style={styles.taskDetailDescription}>
+                        {selectedWorksheet.task_templates.description}
+                      </Text>
+                    )}
+                    {selectedWorksheet.task_templates?.category && (
+                      <View style={styles.taskDetailCategory}>
+                        <Text style={styles.taskDetailCategoryText}>
+                          {selectedWorksheet.task_templates.category}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Upload Foto Section */}
+                  <View style={styles.uploadSection}>
+                    <Text style={styles.uploadLabel}>Foto Bukti (Opsional)</Text>
+                    {uploadedImage ? (
+                      <View style={styles.imagePreviewContainer}>
+                        <Image 
+                          source={{ uri: uploadedImage.uri }} 
+                          style={styles.imagePreview} 
+                        />
+                        <TouchableOpacity 
+                          style={styles.removeImageButton}
+                          onPress={() => setUploadedImage(null)}
+                        >
+                          <FontAwesome5 name="times-circle" size={24} color="#FF6B6B" />
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TouchableOpacity 
+                        style={styles.uploadButton}
+                        onPress={handlePickImage}
+                      >
+                        <FontAwesome5 name="camera" size={24} color="#5EC898" />
+                        <Text style={styles.uploadButtonText}>Upload Foto</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Catatan Section */}
+                  <View style={styles.notesSection}>
+                    <Text style={styles.notesLabel}>Catatan (Opsional)</Text>
+                    <TextInput
+                      style={styles.notesInput}
+                      placeholder="Tambahkan catatan..."
+                      placeholderTextColor="#999"
+                      multiline
+                      numberOfLines={4}
+                      value={notes}
+                      onChangeText={setNotes}
+                      textAlignVertical="top"
+                    />
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={handleCloseChecklistModal}
+              >
+                <Text style={styles.cancelButtonText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[
+                  styles.submitButton,
+                  submittingChecklist && styles.submitButtonDisabled
+                ]}
+                onPress={handleSubmitChecklist}
+                disabled={submittingChecklist}
+              >
+                {submittingChecklist ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <>
+                    <FontAwesome5 name="check" size={16} color="white" style={styles.submitButtonIcon} />
+                    <Text style={styles.submitButtonText}>Selesai</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      {/* =================== END CHECKLIST MODAL =================== */}
     </View>
   );
 };
@@ -945,7 +1407,6 @@ const HomeWithTabs = () => {
         tabPress: (e) => {
           if (route.name === 'Absen') {
             e.preventDefault();
-            // Cek status pending sebelum navigasi ke camera
             checkPendingStatusAndNavigate(navigation);
           }
           else if (route.name === 'Riwayat') {
@@ -971,67 +1432,82 @@ const HomeWithTabs = () => {
   );
 };
 
-// Fungsi helper untuk cek status pending di tab navigator
 const checkPendingStatusAndNavigate = async (navigation) => {
   try {
-    // Ambil data user dari AsyncStorage
     const userData = await AsyncStorage.getItem('@dataSelf');
     if (!userData) return;
     
     const parsedUserData = JSON.parse(userData);
     if (!parsedUserData?.user?.id) return;
     
-    // Get today's date
     const today = new Date().toISOString().split('T')[0];
     
-    // Fetch today's attendance
     const response = await fetch(
       `${API_URL}/api/attendance?user_id=${parsedUserData.user.id}&start_date=${today}&end_date=${today}`
     );
     
-    if (response.ok) {
-      const result = await response.json();
-      
-      if (result.attendance && result.attendance.length > 0) {
-        const todayAttendance = result.attendance.find(item => 
-          item.date === today
-        );
-        
-        if (todayAttendance) {
-          // Cek apakah ada status pending
-          const checkInStatus = todayAttendance.check_in?.status;
-          const checkOutStatus = todayAttendance.check_out?.status;
-          const breakInStatus = todayAttendance.break_in?.status;
-          const breakOutStatus = todayAttendance.break_out?.status;
-          
-          const hasPending = checkInStatus === 'Pending' || 
-                           checkOutStatus === 'Pending' || 
-                           breakInStatus === 'Pending' || 
-                           breakOutStatus === 'Pending';
-          
-          if (hasPending) {
-            Alert.alert(
-              'Absensi Pending',
-              'Anda masih memiliki absensi dengan status pending. Harap tunggu konfirmasi admin sebelum melakukan absensi berikutnya.',
-              [
-                {
-                  text: 'OK',
-                  style: 'default'
-                }
-              ]
-            );
-            return;
+    if (!response.ok) {
+      // Jika ada error saat fetch, tampilkan alert
+      Alert.alert(
+        'Error Memuat Data',
+        'Tidak dapat memuat data absensi. Silakan refresh data terlebih dahulu dari halaman utama.',
+        [
+          {
+            text: 'OK',
+            style: 'default'
           }
+        ]
+      );
+      return;
+    }
+    
+    const result = await response.json();
+    
+    if (result.attendance && result.attendance.length > 0) {
+      const todayAttendance = result.attendance.find(item => 
+        item.date === today
+      );
+      
+      if (todayAttendance) {
+        const checkInStatus = todayAttendance.check_in?.status;
+        const checkOutStatus = todayAttendance.check_out?.status;
+        const breakInStatus = todayAttendance.break_in?.status;
+        const breakOutStatus = todayAttendance.break_out?.status;
+        
+        const hasPending = checkInStatus === 'Pending' || 
+                         checkOutStatus === 'Pending' || 
+                         breakInStatus === 'Pending' || 
+                         breakOutStatus === 'Pending';
+        
+        if (hasPending) {
+          Alert.alert(
+            'Absensi Pending',
+            'Anda masih memiliki absensi dengan status pending. Harap tunggu konfirmasi admin sebelum melakukan absensi berikutnya.',
+            [
+              {
+                text: 'OK',
+                style: 'default'
+              }
+            ]
+          );
+          return;
         }
       }
     }
     
-    // Jika tidak ada pending atau error, lanjutkan ke camera
     navigation.navigate('Camera');
   } catch (error) {
     console.log('Error checking pending status:', error);
-    // Jika ada error, tetap lanjutkan ke camera
-    navigation.navigate('Camera');
+    Alert.alert(
+      'Error',
+      'Terjadi kesalahan saat memuat data. Silakan coba lagi.',
+      [
+        {
+          text: 'OK',
+          style: 'default'
+        }
+      ]
+    );
   }
 };
 
@@ -1050,6 +1526,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     color: '#666',
+  },
+  // MAIN SCROLLVIEW - Yang membungkus semua content
+  mainScrollView: {
+    flex: 1,
   },
   headerBackground: {
     height: 180,
@@ -1095,7 +1575,6 @@ const styles = StyleSheet.create({
     marginLeft: -40,
     position: 'relative',
   },
-  // Style untuk badge notifikasi
   notificationBadge: {
     position: 'absolute',
     top: -5,
@@ -1116,9 +1595,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  // CONTENT CONTAINER - Yang menampung semua card dan section
+  contentContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 100, // Space untuk bottom tab
+  },
   attendanceCard: {
     backgroundColor: 'white',
-    marginHorizontal: 20,
     marginTop: -65,
     borderRadius: 15,
     padding: 20,
@@ -1127,6 +1610,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
+    marginBottom: 20, // Spacing ke section berikutnya
   },
   dateText: {
     color: '#999',
@@ -1139,7 +1623,6 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 15,
   },
-  // Styles untuk upcoming schedules
   upcomingSchedulesContainer: {
     backgroundColor: '#F8F9FA',
     borderRadius: 10,
@@ -1199,7 +1682,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
   },
-  // Style untuk pending warning
+  errorWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFEBEE',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFCDD2',
+    marginTop: 10,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#C62828',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
   pendingWarning: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1217,16 +1716,29 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     fontWeight: '500',
   },
-  content: {
-    flex: 1,
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#5EC898',
+    paddingVertical: 10,
     paddingHorizontal: 20,
-    marginTop: 20,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  refreshIcon: {
+    marginRight: 8,
+  },
+  refreshButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   menuGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   menuItem: {
     width: (screenWidth - 60) / 4,
@@ -1247,11 +1759,315 @@ const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 14,
   },
+  
+  // =================== WORKSHEET STYLES ===================
+  worksheetSection: {
+    backgroundColor: 'white',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+  },
+  worksheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  worksheetTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  worksheetIcon: {
+    marginRight: 8,
+  },
+  worksheetTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  progressBadge: {
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5EC898',
+  },
+  worksheetLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingSmallText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyWorksheet: {
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  emptyWorksheetText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  progressBarContainer: {
+    marginBottom: 20,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#5EC898',
+    borderRadius: 4,
+  },
+  progressPercentage: {
+    marginTop: 5,
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'right',
+  },
+  worksheetItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F8F9FA',
+    marginBottom: 10,
+  },
+  worksheetItemCompleted: {
+    backgroundColor: '#E8F5E8',
+    opacity: 0.8,
+  },
+  worksheetItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  checkboxContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#5EC898',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  checkboxChecked: {
+    backgroundColor: '#5EC898',
+  },
+  worksheetItemContent: {
+    flex: 1,
+  },
+  worksheetItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  worksheetItemTitleCompleted: {
+    color: '#999',
+    textDecorationLine: 'line-through',
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  categoryText: {
+    fontSize: 11,
+    color: '#5EC898',
+    fontWeight: '500',
+  },
+  completedTime: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 4,
+  },
+
+  // =================== MODAL STYLES ===================
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  taskDetailCard: {
+    backgroundColor: '#F8F9FA',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  taskDetailTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  taskDetailDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  taskDetailCategory: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  taskDetailCategoryText: {
+    fontSize: 12,
+    color: '#5EC898',
+    fontWeight: '600',
+  },
+  uploadSection: {
+    marginBottom: 20,
+  },
+  uploadLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F9FA',
+    padding: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderStyle: 'dashed',
+  },
+  uploadButtonText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#5EC898',
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 10,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 2,
+  },
+  notesSection: {
+    marginBottom: 20,
+  },
+  notesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  notesInput: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    padding: 15,
+    fontSize: 14,
+    color: '#333',
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    gap: 10,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 15,
+    borderRadius: 10,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  submitButton: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 15,
+    borderRadius: 10,
+    backgroundColor: '#5EC898',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#A0D9C3',
+  },
+  submitButtonIcon: {
+    marginRight: 8,
+  },
+  submitButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  // =================== END MODAL STYLES ===================
+  
   riwayatSection: {
     backgroundColor: 'white',
     borderRadius: 15,
     padding: 20,
-    marginBottom: 100,
+    marginBottom: 20, // Spacing untuk bottom tab
   },
   riwayatHeader: {
     flexDirection: 'row',

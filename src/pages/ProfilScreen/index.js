@@ -55,7 +55,9 @@ const ProfilScreen = ({ navigation }) => {
 
               navigation.reset({
                 index: 0,
-                routes: [{ name: 'Login' }],
+                // routes: [{ name: 'Login' }],
+                routes: [{ name: 'LoginAccount' }],
+
               });
             } catch (error) {
               console.log('Error logging out:', error);
@@ -77,19 +79,7 @@ const ProfilScreen = ({ navigation }) => {
         }
       ]
     },
-    {
-      section: 'Perusahaan',
-      items: [
-        
-        {
-          icon: 'sitemap',
-          title: 'Kalender Karyawan & informasi',
-          onPress: () => navigation.navigate('InformationStructureScreen')
-            // onPress: () => alert('Sedang dalam pengembangan')
-
-        }
-      ]
-    },
+   
     {
       section: 'Tentang',
       items: [
@@ -100,13 +90,13 @@ const ProfilScreen = ({ navigation }) => {
       
 
         },
-        {
-          icon: 'file-alt',
-          title: 'Privacy Policy',
-          // onPress: () => navigation.navigate('PrivacyPolicy')
-            onPress: () => Linking.openURL('https://www.termsfeed.com/live/723fee81-1714-4474-8ec2-8452199e51b5')
+        // {
+        //   icon: 'file-alt',
+        //   title: 'Privacy Policy',
+        //   // onPress: () => navigation.navigate('PrivacyPolicy')
+        //     onPress: () => Linking.openURL('https://www.termsfeed.com/live/723fee81-1714-4474-8ec2-8452199e51b5')
 
-        },
+        // },
         {
           icon: 'sign-out-alt',
           title: 'Logout',
